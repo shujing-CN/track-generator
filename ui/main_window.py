@@ -17,27 +17,37 @@ class TrackGeneratorWindow(forms.Form):
         from rhino.document_manager import GeneratedDocument
         self.generated=GeneratedDocument(); self.canvas=DrawingCanvas(); self.preview=ImagePreview(self._pick_color)
         self.mode=forms.DropDown()
-        self.mode.Items.Add(forms.ListItem(Text="手绘输入")); self.mode.Items.Add(forms.ListItem(Text="图片输入"))
+        self.mode.Items.Add(forms.ListItem("手绘输入")); self.mode.Items.Add(forms.ListItem("图片输入"))
         self.mode.SelectedIndex=0; self.mode.SelectedIndexChanged+=self._mode_changed
         self.input_panel=forms.Panel(); self.input_panel.Content=self.canvas
         self.width=self._numeric(self.config["default_map_width"],1,100000); self.length=self._numeric(self.config["default_map_length"],1,100000); self.track_width=self._numeric(self.config["default_track_width"],.01,10000)
         self.smoothing=self._numeric(self.config["default_smoothing"],0,1,.05); self.spacing=self._numeric(self.config["default_sample_spacing"],.1,1000,.5)
-        self.tolerance=self._numeric(.25,.01,1.5,.05); self.closed=forms.CheckBox(Text="闭合路径"); self.terrain=forms.CheckBox(Text="生成基础地面",Checked=True); self.thickness=self._numeric(0,0,100,.1)
-        self.editor=forms.TextBox(Text=self.config.get("unreal_editor_path",'')); self.project=forms.TextBox(Text=self.config.get("unreal_project_path",'')); self.status=forms.Label(Text="就绪",Wrap=forms.WrapMode.Word)
+        self.tolerance=self._numeric(.25,.01,1.5,.05)
+        self.closed=forms.CheckBox(); self.closed.Text="闭合路径"
+        self.terrain=forms.CheckBox(); self.terrain.Text="生成基础地面"; self.terrain.Checked=True
+        self.thickness=self._numeric(0,0,100,.1)
+        self.editor=forms.TextBox(); self.editor.Text=self.config.get("unreal_editor_path",'')
+        self.project=forms.TextBox(); self.project.Text=self.config.get("unreal_project_path",'')
+        self.status=forms.Label(); self.status.Text="就绪"; self.status.Wrap=forms.WrapMode.Word
         self.Content=self._layout()
-    def _numeric(self,value,minv,maxv,inc=1): return forms.NumericStepper(Value=float(value),MinValue=minv,MaxValue=maxv,Increment=inc,DecimalPlaces=2)
-    def _button(self,text,handler): b=forms.Button(Text=text); b.Click+=handler; return b
+    def _numeric(self,value,minv,maxv,inc=1):
+        control=forms.NumericStepper(); control.Value=float(value); control.MinValue=minv; control.MaxValue=maxv; control.Increment=inc; control.DecimalPlaces=2
+        return control
+    def _label(self,text):
+        control=forms.Label(); control.Text=text; return control
+    def _button(self,text,handler):
+        b=forms.Button(); b.Text=text; b.Click+=handler; return b
     def _layout(self):
-        p=forms.DynamicLayout(Spacing=drawing.Size(8,8)); p.AddRow(forms.Label(Text="输入模式"),self.mode)
+        p=forms.DynamicLayout(); p.Spacing=drawing.Size(8,8); p.AddRow(self._label("输入模式"),self.mode)
         p.AddRow(self.input_panel)
         p.AddRow(self._button("清空",self._clear),self._button("上传图片",self._upload),self._button("自动识别线条",self._auto),self._button("手动选择线条颜色",self._select_hint),self._button("确认图片路径",self._confirm))
-        grid=forms.DynamicLayout(Spacing=drawing.Size(8,6))
-        grid.AddRow(forms.Label(Text="地图宽度"),self.width,forms.Label(Text="地图长度"),self.length,forms.Label(Text="赛道宽度"),self.track_width)
-        grid.AddRow(forms.Label(Text="平滑程度"),self.smoothing,forms.Label(Text="采样间距"),self.spacing,forms.Label(Text="颜色容差"),self.tolerance)
-        grid.AddRow(self.closed,self.terrain,forms.Label(Text="路面厚度"),self.thickness)
+        grid=forms.DynamicLayout(); grid.Spacing=drawing.Size(8,6)
+        grid.AddRow(self._label("地图宽度"),self.width,self._label("地图长度"),self.length,self._label("赛道宽度"),self.track_width)
+        grid.AddRow(self._label("平滑程度"),self.smoothing,self._label("采样间距"),self.spacing,self._label("颜色容差"),self.tolerance)
+        grid.AddRow(self.closed,self.terrain,self._label("路面厚度"),self.thickness)
         p.AddRow(grid); p.AddRow(self._button("生成模型",self._generate),self._button("重新生成",self._generate),self._button("导出模型",self._export),self._button("打开 Unreal Engine",self._unreal))
-        p.AddRow(forms.Label(Text="UnrealEditor 路径"),self.editor); p.AddRow(forms.Label(Text=".uproject 路径"),self.project); p.AddRow(forms.Separator()); p.AddRow(self.status)
-        return forms.Scrollable(Content=p)
+        p.AddRow(self._label("UnrealEditor 路径"),self.editor); p.AddRow(self._label(".uproject 路径"),self.project); p.AddRow(forms.Separator()); p.AddRow(self.status)
+        scroll=forms.Scrollable(); scroll.Content=p; return scroll
     def _set_status(self,text): self.status.Text=text
     def _error(self,prefix,exc): self._set_status("{}：{}".format(prefix,exc)); forms.MessageBox.Show(self,self.status.Text,"错误",forms.MessageBoxButtons.OK,forms.MessageBoxType.Error)
     def _mode_changed(self,s,e):
