@@ -112,6 +112,15 @@ python -m pytest -q
 python -m compileall -q .
 ```
 
+当 Rhino 8 已经运行时，还可以用 Rhino 自带命令行执行真实 Eto UI 烟雾测试：
+
+```powershell
+& "<RhinoCode.exe path>" script "<repo-root>\tests\rhino_ui_smoke.py"
+Get-Content .\rhino_ui_smoke_result.txt
+```
+
+该测试会在 Rhino 进程内构造窗口、切换两种输入模式、实际显示窗口并立即关闭。
+
 测试覆盖无效/重复/过密点、开放和闭合路径、平滑、等距重采样、坐标角点和纵轴翻转、非方形比例映射、黑白和彩色线、透明背景、粗线骨架、多连通区域、开放/闭合排序、分叉拒绝、赛道/地形 Mesh 数据、厚度、配置回退和 UE 路径校验。测试图片在内存中生成，不依赖人工样本。
 
 ## Rhino 人工验收（尚未在当前开发环境自动执行）

@@ -1,6 +1,7 @@
 import os, tempfile, traceback
 import Eto.Drawing as drawing
 import Eto.Forms as forms
+import System
 from PIL import Image
 
 from config import load_config, save_config
@@ -46,10 +47,12 @@ class TrackGeneratorWindow(forms.Form):
         grid.AddRow(self._label("平滑程度"),self.smoothing,self._label("采样间距"),self.spacing,self._label("颜色容差"),self.tolerance)
         grid.AddRow(self.closed,self.terrain,self._label("路面厚度"),self.thickness)
         p.AddRow(grid); p.AddRow(self._button("生成模型",self._generate),self._button("重新生成",self._generate),self._button("导出模型",self._export),self._button("打开 Unreal Engine",self._unreal))
-        p.AddRow(self._label("UnrealEditor 路径"),self.editor); p.AddRow(self._label(".uproject 路径"),self.project); p.AddRow(forms.Separator()); p.AddRow(self.status)
+        p.AddRow(self._label("UnrealEditor 路径"),self.editor); p.AddRow(self._label(".uproject 路径"),self.project); p.AddRow(self._label("")); p.AddRow(self.status)
         scroll=forms.Scrollable(); scroll.Content=p; return scroll
     def _set_status(self,text): self.status.Text=text
-    def _error(self,prefix,exc): self._set_status("{}：{}".format(prefix,exc)); forms.MessageBox.Show(self,self.status.Text,"错误",forms.MessageBoxButtons.OK,forms.MessageBoxType.Error)
+    def _error(self,prefix,exc):
+        self._set_status("{}：{}".format(prefix,exc))
+        forms.MessageBox.Show(self,self.status.Text,"错误",forms.MessageBoxButtons.OK,forms.MessageBoxType.Error,forms.MessageBoxDefaultButton.Default)
     def _switch_mode(self,index):
         self.mode_index=index
         self.input_panel.Content=self.canvas if index==0 else self.preview
@@ -62,7 +65,7 @@ class TrackGeneratorWindow(forms.Form):
         else: self.image=None; self.image_path=None; self.image_points=[]; self.image_confirmed=False; self.preview.bitmap=None; self.preview.Invalidate()
         self._set_status("当前输入已清空")
     def _upload(self,s,e):
-        dialog=forms.OpenFileDialog(); dialog.Filters.Add(forms.FileFilter("图片",".png",".jpg",".jpeg",".bmp"))
+        dialog=forms.OpenFileDialog(); extensions=System.Array[System.String]([".png",".jpg",".jpeg",".bmp"]); dialog.Filters.Add(forms.FileFilter("图片",extensions))
         if dialog.ShowDialog(self)!=forms.DialogResult.Ok: return
         try:
             if os.path.splitext(dialog.FileName)[1].lower() not in SUPPORTED_EXTENSIONS: raise ValueError("不支持的图片格式")
