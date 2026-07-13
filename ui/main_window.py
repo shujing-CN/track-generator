@@ -16,9 +16,9 @@ class TrackGeneratorWindow(forms.Form):
         self.doc=doc; self.config=load_config(); self.image=None; self.image_path=None; self.image_points=[]; self.image_closed=False; self.image_confirmed=False; self.target_color=None; self.preview_temp=None
         from rhino.document_manager import GeneratedDocument
         self.generated=GeneratedDocument(); self.canvas=DrawingCanvas(); self.preview=ImagePreview(self._pick_color)
-        self.mode=forms.DropDown()
-        self.mode.Items.Add(forms.ListItem("手绘输入")); self.mode.Items.Add(forms.ListItem("图片输入"))
-        self.mode.SelectedIndex=0; self.mode.SelectedIndexChanged+=self._mode_changed
+        self.mode_index=0
+        self.draw_mode_button=self._button("手绘输入",self._use_draw_mode)
+        self.image_mode_button=self._button("图片输入",self._use_image_mode)
         self.input_panel=forms.Panel(); self.input_panel.Content=self.canvas
         self.width=self._numeric(self.config["default_map_width"],1,100000); self.length=self._numeric(self.config["default_map_length"],1,100000); self.track_width=self._numeric(self.config["default_track_width"],.01,10000)
         self.smoothing=self._numeric(self.config["default_smoothing"],0,1,.05); self.spacing=self._numeric(self.config["default_sample_spacing"],.1,1000,.5)
@@ -38,7 +38,7 @@ class TrackGeneratorWindow(forms.Form):
     def _button(self,text,handler):
         b=forms.Button(); b.Text=text; b.Click+=handler; return b
     def _layout(self):
-        p=forms.DynamicLayout(); p.Spacing=drawing.Size(8,8); p.AddRow(self._label("输入模式"),self.mode)
+        p=forms.DynamicLayout(); p.Spacing=drawing.Size(8,8); p.AddRow(self._label("输入模式"),self.draw_mode_button,self.image_mode_button)
         p.AddRow(self.input_panel)
         p.AddRow(self._button("清空",self._clear),self._button("上传图片",self._upload),self._button("自动识别线条",self._auto),self._button("手动选择线条颜色",self._select_hint),self._button("确认图片路径",self._confirm))
         grid=forms.DynamicLayout(); grid.Spacing=drawing.Size(8,6)
@@ -50,11 +50,15 @@ class TrackGeneratorWindow(forms.Form):
         scroll=forms.Scrollable(); scroll.Content=p; return scroll
     def _set_status(self,text): self.status.Text=text
     def _error(self,prefix,exc): self._set_status("{}：{}".format(prefix,exc)); forms.MessageBox.Show(self,self.status.Text,"错误",forms.MessageBoxButtons.OK,forms.MessageBoxType.Error)
-    def _mode_changed(self,s,e):
-        self.input_panel.Content=self.canvas if self.mode.SelectedIndex==0 else self.preview
+    def _switch_mode(self,index):
+        self.mode_index=index
+        self.input_panel.Content=self.canvas if index==0 else self.preview
         self.input_panel.Invalidate(); self.Invalidate()
+        self._set_status("当前模式：{}".format("手绘输入" if index==0 else "图片输入"))
+    def _use_draw_mode(self,s,e): self._switch_mode(0)
+    def _use_image_mode(self,s,e): self._switch_mode(1)
     def _clear(self,s,e):
-        if self.mode.SelectedIndex==0: self.canvas.clear()
+        if self.mode_index==0: self.canvas.clear()
         else: self.image=None; self.image_path=None; self.image_points=[]; self.image_confirmed=False; self.preview.bitmap=None; self.preview.Invalidate()
         self._set_status("当前输入已清空")
     def _upload(self,s,e):
@@ -63,7 +67,7 @@ class TrackGeneratorWindow(forms.Form):
         try:
             if os.path.splitext(dialog.FileName)[1].lower() not in SUPPORTED_EXTENSIONS: raise ValueError("不支持的图片格式")
             self.image=Image.open(dialog.FileName); self.image.load(); self.image_path=dialog.FileName; self.target_color=None; self.image_confirmed=False
-            self.preview.set_file(dialog.FileName,self.image.size); self.mode.SelectedIndex=1; self._set_status("图片已加载：{} × {}，请识别并确认路径".format(*self.image.size))
+            self.preview.set_file(dialog.FileName,self.image.size); self._switch_mode(1); self._set_status("图片已加载：{} × {}，请识别并确认路径".format(*self.image.size))
         except Exception as exc: self._error("图片无法读取",exc)
     def _pick_color(self,x,y):
         if not self.image: return
@@ -85,7 +89,7 @@ class TrackGeneratorWindow(forms.Form):
         if len(self.image_points)<2: self._error("无法确认",ValueError("请先成功提取目标线")); return
         self.image_confirmed=True; self.closed.Checked=self.image_closed; self._set_status("图片路径已确认，共 {} 点".format(len(self.image_points)))
     def _source(self):
-        if self.mode.SelectedIndex==0:
+        if self.mode_index==0:
             if len(self.canvas.points)<2: raise ValueError("请先绘制至少两个有效点")
             return self.canvas.points,self.canvas.Width,self.canvas.Height
         if not self.image_confirmed: raise ValueError("图片路径尚未确认")
