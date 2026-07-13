@@ -1,0 +1,10 @@
+{
+  "default_map_width": 500,
+  "default_map_length": 500,
+  "default_track_width": 8,
+  "default_smoothing": 0.3,
+  "default_sample_spacing": 2,
+  "export_directory": "",
+  "unreal_editor_path": "",
+  "unreal_project_path": ""
+}
