@@ -94,6 +94,15 @@ def test_create_first_person_track_project_refuses_existing_user_directory(tmp_p
         create_first_person_track_project(str(editor),str(model),str(project_dir))
     assert (project_dir/"keep.txt").read_text()=="user data"
 
+def test_create_first_person_track_project_allows_old_generated_project_without_marker(tmp_path):
+    editor=_make_fake_engine(tmp_path)
+    model=tmp_path/"generated_track.obj"; model.write_text("o track")
+    project_dir=tmp_path/"OutProject"; project_dir.mkdir()
+    (project_dir/(PROJECT_NAME+".uproject")).write_text("{}")
+    project=create_first_person_track_project(str(editor),str(model),str(project_dir))
+    assert os.path.isfile(os.path.join(project["project_dir"],PROJECT_MARKER))
+    assert os.path.basename(project["uproject"])==PROJECT_NAME+".uproject"
+
 def test_launch_first_person_track_project_uses_import_script(tmp_path, monkeypatch):
     editor=_make_fake_engine(tmp_path)
     model=tmp_path/"generated_track.obj"; model.write_text("o track")

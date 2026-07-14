@@ -54,12 +54,24 @@ def first_person_template_path(editor_path):
     return template
 
 
+def _is_rebuildable_generated_project(project_dir):
+    if os.path.isfile(os.path.join(project_dir, PROJECT_MARKER)):
+        return True
+    project_files = {
+        PROJECT_NAME + ".uproject",
+        "TP_FirstPersonBP.uproject",
+    }
+    if any(os.path.isfile(os.path.join(project_dir, name)) for name in project_files):
+        return True
+    generated_children = {"TrackSource", "Scripts"}
+    return all(os.path.isdir(os.path.join(project_dir, name)) for name in generated_children)
+
+
 def _copy_template(template_dir, project_dir):
     def ignore(_directory, names):
         return {name for name in names if name in {"Binaries", "Intermediate", "Saved", "DerivedDataCache", ".vs"}}
     if os.path.isdir(project_dir):
-        marker = os.path.join(project_dir, PROJECT_MARKER)
-        if not os.path.isfile(marker):
+        if not _is_rebuildable_generated_project(project_dir):
             raise ValueError(
                 "project directory already exists and was not created by this tool: {}".format(project_dir)
             )
