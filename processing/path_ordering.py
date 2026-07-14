@@ -5,7 +5,17 @@ class PathOrderingError(ValueError): pass
 def order_mask_path(mask):
     pixels = {(x, y) for y, row in enumerate(mask) for x, v in enumerate(row) if v}
     if len(pixels) < 2: raise PathOrderingError("path is too short")
-    graph = {p: {(p[0]+dx, p[1]+dy) for dx, dy in NEIGHBORS if (p[0]+dx, p[1]+dy) in pixels} for p in pixels}
+    graph = {}
+    for p in pixels:
+        adjacent=set()
+        for dx,dy in NEIGHBORS:
+            q=(p[0]+dx,p[1]+dy)
+            if q not in pixels: continue
+            # A diagonal is redundant when an orthogonal pixel already joins
+            # the corner; keeping both creates degree-3 triangles in a valid line.
+            if dx and dy and ((p[0]+dx,p[1]) in pixels or (p[0],p[1]+dy) in pixels): continue
+            adjacent.add(q)
+        graph[p]=adjacent
     seen, stack = set(), [next(iter(pixels))]
     while stack:
         p = stack.pop()

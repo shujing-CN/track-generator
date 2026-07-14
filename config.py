@@ -1,6 +1,6 @@
 import json, os
 
-DEFAULTS = {"default_map_width":500.0,"default_map_length":500.0,"default_track_width":8.0,"default_smoothing":0.3,"default_sample_spacing":2.0,"export_directory":"","unreal_editor_path":"","unreal_project_path":""}
+DEFAULTS = {"default_map_width":500.0,"default_map_length":500.0,"default_track_width":8.0,"default_smoothing":0.55,"default_sample_spacing":2.0,"export_directory":"","unreal_editor_path":"","unreal_project_path":"","unreal_project_directory":"unreal_projects/GeneratedTrackFPS"}
 
 def config_path(): return os.path.join(os.path.dirname(os.path.abspath(__file__)),"config.json")
 

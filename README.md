@@ -1,39 +1,37 @@
 # Rhino 8 手绘赛道基础地图生成工具
 
-这是一个在 Rhino 8 内部运行的 Python 3 + RhinoCommon + Eto.Forms 工具。用户可以手绘单条路径，或从一张包含单条显著目标线的图片中提取路径，并在当前 Rhino 文档生成中心线、固定宽度赛道 Mesh 和基础平面地形。
+这是一个运行在 Rhino 8 内部的 Python 3 + RhinoCommon + Eto.Forms 工具。它可以从手绘轨迹或图片中的单条显著路径生成赛道基础地图，并导出为 Unreal Engine 可使用的模型。
 
-程序运行时不调用大语言模型、图像生成模型、在线生成式 AI 服务，也不使用 AI 推测赛道形状。最终几何只来自用户笔迹或图片像素，经确定性的清理、平滑、等距重采样、坐标映射和 Mesh 算法生成。AI 只用于本项目开发期间辅助编写与调试代码。
+程序不使用在线生成式 AI 推测赛道形状。最终几何只来自用户笔迹或图片像素，并经过确定性的清理、等距重采样、平滑、坐标映射和 Mesh 生成流程。
 
 ## 已实现功能
 
-- Eto.Forms 模型外窗口，支持手绘和图片两种输入，切换模式不会清除另一模式的数据。
-- 单笔鼠标绘制、实时轨迹显示、距离过滤和清空重画。
-- PNG、JPG、JPEG、BMP 加载与预览。
-- HSV 颜色距离分割；自动候选颜色、在线条上点击取色、颜色容差调节、红色遮罩预览和显式确认。
-- 最大连通区域、Zhang-Suen 骨架细化、开放/闭合单路径排序；对空白、多区域和分叉给出错误。
-- 统一路径清理、平滑、等距重采样以及保持比例、居中、翻转 Y 轴的世界坐标映射。
-- Rhino 当前文档内生成 SourcePath、Centerline、Road、Terrain；分别放入 `GeneratedTrack` 子图层。
-- 赛道路面为连续 Rhino Mesh；支持开放/闭合路径以及可选厚度。
-- 急弯和过大赛道宽度检查，拒绝明显不可靠的 Mesh。
-- 安全重生成：新对象全部创建成功后，才按保存的 GUID 删除上一批工具对象；不按类型或图层批量删除用户对象。
-- 通过 Rhino 命令导出程序生成对象为 OBJ 或 FBX，并验证输出文件存在。
-- 从本地配置读取 UnrealEditor 和 `.uproject` 路径，校验后启动进程。
-- 中文状态与错误提示；配置损坏或缺失时回退到安全默认值。
+- 手绘输入和图片输入两种模式。
+- 图片路径提取支持 PNG/JPG/JPEG/BMP、自动识别线条、手动取色、颜色容差和遮罩预览。
+- 输入路径会自动删除重复点、零长度段和过密点，然后等距重采样并平滑。
+- 路径美化提供低、中、高三个预设，可显示原始路径和美化路径对比。
+- Rhino 文档内生成 `SourcePath`、`Centerline`、`Road`、`CurbsRed`、`CurbsWhite`、`Terrain` 图层对象。
+- 赛道路面是黑色实心 Mesh。
+- 弯道外侧自动生成红白相间的实心路肩，路肩贴合道路边缘、略高于路面，并尽量避免缝隙。
+- 普通直线、圆形、S 形、轻微抖动手绘线和 90 度折线会优先自动平滑并生成；极端折返、自交或宽度明显超过局部半径时才提示用户。
+- 可从 Rhino 导出 OBJ/FBX。
+- 可直接创建独立的 Unreal Engine 第一人称项目，把当前生成的赛道模型作为地图导入并打开，不再依赖已有 `.uproject`。
 
 ## 环境要求
 
-- Rhino 8（Windows），Rhino 8 ScriptEditor 的 Python 3 运行时。
-- Pillow。纯算法测试另需 pytest。
-- 如果需要启动 UE：本机 Unreal Engine 5 编辑器和已有 `.uproject`。
+- Windows + Rhino 8。
+- Rhino 8 ScriptEditor 的 Python 3 运行时。
+- Pillow。
+- 如需打开 UE：本机 Unreal Engine 5 编辑器，且引擎安装目录中包含 `Templates/TP_FirstPersonBP` 第一人称模板。
 
-Rhino 的 Python 环境与系统 Python 可能不同。请在 Rhino 8 的 Python 3 ScriptEditor 中执行：
+在 Rhino 8 的 Python 3 ScriptEditor 中安装 Pillow：
 
 ```python
 import subprocess, sys
 subprocess.check_call([sys.executable, "-m", "pip", "install", "Pillow>=10,<12"])
 ```
 
-开发测试环境安装：
+开发测试环境安装依赖：
 
 ```powershell
 python -m pip install -r requirements.txt
@@ -44,64 +42,67 @@ python -m pip install -r requirements.txt
 1. 打开 Rhino 8 和一个可写文档。
 2. 打开 `ScriptEditor`，选择 Python 3。
 3. 打开仓库根目录的 `main.py` 并运行。
-4. “手绘赛道基础地图生成工具”窗口会以模型外窗口显示。
+4. “手绘赛道生成工具”窗口会以模型外窗口显示。
 
 不要使用 Rhino 7 的 IronPython 2 运行本项目。
 
-## 手绘模式
+## 基本使用
 
-1. 选择“手绘输入”。
-2. 在白色画布按下鼠标并连续绘制，松开结束。第一版只使用最后一笔连续路径。
+### 手绘模式
+
+1. 点击“手绘输入”。
+2. 在画布按下鼠标并连续绘制，松开结束。
 3. 设置地图宽度、地图长度、赛道宽度、平滑程度、采样间距、闭合和地面选项。
-4. 点击“生成模型”。状态栏会显示原始点、处理后点和生成对象数。
-5. 参数变化后点击“重新生成”。原始手绘点保留。
+4. 点击“生成模型”。
+5. 参数变化后点击“重新生成”，原始手绘点会保留。
 
-## 图片模式
+### 图片模式
 
 1. 点击“上传图片”，选择 PNG/JPG/JPEG/BMP。
-2. 点击“自动识别线条”。红色区域是提取遮罩预览。
-3. 如果自动结果不正确，点击“手动选择线条颜色”，再直接点击预览中目标线的像素。
-4. 调整“颜色容差”后，再次点击目标线或“自动识别线条”刷新结果。容差过高可能包含背景，过低可能断线。
-5. 预览正确后点击“确认图片路径”，之后才能生成模型。
-6. 设置参数并点击“生成模型”。
+2. 点击“自动识别线条”；如果结果不对，使用“手动选择线条颜色”在预览图中点选目标线条。
+3. 调整“颜色容差”，直到预览遮罩只覆盖目标路径。
+4. 点击“确认图片路径”。
+5. 设置参数并点击“生成模型”。
 
-图片应包含一条连续、没有分叉且与背景有明显颜色、亮度或饱和度差异的主线。透明背景受支持。自动识别失败不会阻止手动取色流程。
+图片最好只包含一条连续、无分叉、与背景有明显颜色或亮度差异的主路径。复杂背景可以用手动取色和容差调整处理。
 
-## 生成与图层
-
-工具自动创建并安全复用：
-
-```text
-GeneratedTrack
-├── SourcePath
-├── Centerline
-├── Road
-└── Terrain
-```
-
-SourcePath 为映射后的原始折线；Centerline 为处理后的 Rhino 插值曲线；Road 为连续 Mesh；Terrain 为地图尺寸一致的平面 Mesh。Road 默认比 Terrain 高 0.1 个文档单位，减少深度闪烁。
-
-## 导出
+## 导出模型
 
 1. 先成功生成模型。
 2. 点击“导出模型”。
 3. 选择 `.obj` 或 `.fbx` 路径。
-4. 工具只选择本次记录的生成对象，调用 Rhino 导出，并仅在目标文件真实存在时报告成功。
+4. 工具只选择本次记录的生成对象调用 Rhino 导出，并在目标文件真实存在后报告成功。
 
-OBJ 是首选的基础 UE 交换格式。具体 Rhino 导出选项仍由 Rhino 当前版本的命令行导出器处理。
+OBJ 是当前推荐的 UE 交换格式。
 
-## Unreal Engine 配置与启动
+## 直接创建并打开 UE 第一人称项目
 
-可以直接在窗口底部填写完整路径，也可以复制 `config.example.json` 为 `config.json` 后填写：
+窗口底部需要填写：
+
+- `UnrealEditor 路径`：例如 `<UnrealEditor.exe path>`
+- `UE 项目输出目录`：例如 `<repo-root>/unreal_projects/GeneratedTrackFPS`
+
+点击“打开 Unreal Engine”后，工具会：
+
+1. 如果 Rhino 当前已经生成赛道对象，先导出 `model/generated_track.obj`。
+2. 如果当前没有 Rhino 生成对象，则使用已有的 `model/generated_track.obj`。
+3. 从当前 UE 安装的 `Templates/TP_FirstPersonBP` 复制一个新的第一人称项目。
+4. 启用 UE 的 `PythonScriptPlugin`。
+5. 把赛道模型复制到新项目的 `TrackSource/generated_track.obj`。
+6. 创建启动导入脚本 `Scripts/setup_track_project.py`。
+7. 使用 `-DDC-ForceMemoryCache` 打开 UE，绕过本机 DerivedDataCache 不可写导致的崩溃。
+8. UE 启动后自动导入模型、创建 `/Game/Track/TrackMap`，并设置为默认地图。
+
+为了安全，工具只会自动覆盖自己创建过的 `GeneratedTrackFPS` 输出目录。如果你选择了一个已经存在但不是本工具创建的目录，程序会拒绝覆盖，避免误删已有项目。
+
+本地配置可以从 `config.example.json` 复制为被 `.gitignore` 忽略的 `config.json`：
 
 ```json
 {
   "unreal_editor_path": "<UnrealEditor.exe path>",
-  "unreal_project_path": "<project.uproject path>"
+  "unreal_project_directory": "unreal_projects/GeneratedTrackFPS"
 }
 ```
-
-点击“打开 Unreal Engine”只会启动指定项目，不会自动导入模型、创建材质、碰撞或关卡。成功启动后路径会保存到被 `.gitignore` 排除的本地 `config.json`。
 
 ## 自动测试
 
@@ -112,38 +113,17 @@ python -m pytest -q
 python -m compileall -q .
 ```
 
-当 Rhino 8 已经运行时，还可以用 Rhino 自带命令行执行真实 Eto UI 烟雾测试：
+如果本机安装了 Rhino 8，还可以运行 Rhino 内部 smoke 测试：
 
 ```powershell
 & "<RhinoCode.exe path>" script "<repo-root>\tests\rhino_ui_smoke.py"
 Get-Content .\rhino_ui_smoke_result.txt
 ```
 
-该测试会在 Rhino 进程内构造窗口、切换两种输入模式、实际显示窗口并立即关闭。
+测试覆盖路径清理、平滑、等距重采样、图片路径提取、仓库 `images/` 样本、赛道 Mesh、路肩 Mesh、配置回退、UE 启动参数和第一人称项目生成流程。
 
-测试覆盖无效/重复/过密点、开放和闭合路径、平滑、等距重采样、坐标角点和纵轴翻转、非方形比例映射、黑白和彩色线、透明背景、粗线骨架、多连通区域、开放/闭合排序、分叉拒绝、赛道/地形 Mesh 数据、厚度、配置回退和 UE 路径校验。测试图片在内存中生成，不依赖人工样本。
+## 已知边界
 
-## Rhino 人工验收（尚未在当前开发环境自动执行）
-
-1. 按上述方式在 Rhino 8 启动 `main.py`，确认窗口可交互。
-2. 手绘一条 S 形开放线，生成后确认四个子图层各有正确对象且 Road 为连续 Mesh。
-3. 勾选闭合，画一条近似环线，确认首尾路面连接且没有翻面。
-4. 修改赛道宽度和平滑程度并重新生成；确认对象没有累积，手工创建的曲线和 Mesh 未被删除。
-5. 用四类图片验证预览：白底黑线、黑底白线、彩色背景/彩色线、透明背景线。
-6. 故意使用分叉和两条断开线，确认界面显示明确错误且 Rhino 不崩溃。
-7. 导出 OBJ，在 Rhino 或 UE 手工导入，确认尺寸、方向、Road 和 Terrain。
-
-## Unreal Engine 人工验收（尚未在当前开发环境自动执行）
-
-1. 配置真实存在的 `UnrealEditor.exe` 和 `.uproject`。
-2. 点击“打开 Unreal Engine”，确认编辑器打开指定项目。
-3. 在 UE 内容浏览器手工导入上一步 OBJ，检查单位缩放、朝向和法线。
-
-## 已知限制与未验证内容
-
-- 当前开发环境没有 Rhino 8、RhinoCommon GUI 文档上下文或 Unreal Editor，因此 Eto 窗口、Rhino 对象添加、Rhino 命令导出和 UE 实际进程启动尚未自动验证；这些功能没有被虚报为已运行。
-- 第一版只支持单条主要连续路径。多条线、多分叉、大量交叉、严重遮挡、与背景几乎同色或颜色剧烈变化的线不受支持。
-- 自动颜色候选基于缩略图颜色量化；复杂背景应使用在线条上取色和容差调整。
-- 急弯处理采用拒绝生成并提示调整宽度/平滑度，不是道路工程级偏移修复。
-- 路面厚度是可选增强；单层 Mesh（厚度 0）是默认且最稳定路径。
-- 不自动将导出模型导入 UE，不生成材质、碰撞、地形噪声、建筑、树木或游戏逻辑。
+- 当前只支持单条主要连续路径；多条线、大量分叉、自交、严重遮挡或与背景几乎同色的图片仍可能失败。
+- 极端折返或赛道宽度明显超过局部转弯半径时，程序会提示用户降低宽度或提高平滑。
+- UE 项目创建依赖引擎自带第一人称模板；如果引擎安装缺少 `TP_FirstPersonBP`，需要先通过 Epic/UE 安装对应模板。

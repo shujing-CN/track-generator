@@ -19,6 +19,9 @@ importlib.invalidate_caches()
 try:
     import Rhino
     from ui.main_window import TrackGeneratorWindow
+    from rhino.rhino_curve_builder import make_curve, sample_curve
+    from rhino.document_manager import GeneratedDocument
+    from geometry.track_builder import build_track_mesh_data, build_turn_curbs_from_track_mesh
 
     window = TrackGeneratorWindow(Rhino.RhinoDoc.ActiveDoc)
     assert window.Content is not None
@@ -29,7 +32,27 @@ try:
     window.Owner = Rhino.UI.RhinoEtoApp.MainWindow
     window.Show()
     window.Close()
-    message = "PASS: Rhino 8 Eto window constructed, switched modes, shown, and closed successfully."
+    control=[(0,0),(10,1),(20,8),(30,10),(40,4)]
+    curve=make_curve(control,False)
+    sampled=sample_curve(curve,1.0,False)
+    vertices,faces=build_track_mesh_data(sampled,6,thickness=.3)
+    mesh=GeneratedDocument()._mesh(vertices,faces)
+    assert mesh.IsValid and mesh.IsClosed and len(sampled)>len(control)
+    (red,red_faces),(white,white_faces)=build_turn_curbs_from_track_mesh(sampled,vertices,.8,.14,False,.2)
+    assert red_faces and white_faces
+    red_mesh=GeneratedDocument()._mesh(red,red_faces); white_mesh=GeneratedDocument()._mesh(white,white_faces)
+    assert red_mesh.IsValid and red_mesh.IsClosed and white_mesh.IsValid and white_mesh.IsClosed
+    temp_doc=Rhino.RhinoDoc.CreateHeadless(None)
+    generated=GeneratedDocument()
+    ids=generated.generate(temp_doc,sampled,control,100,100,6,False,False,.1,.3,1.0,False,False)
+    colors=set()
+    for object_id in ids:
+        obj=temp_doc.Objects.FindId(object_id)
+        colors.add((obj.Attributes.ObjectColor.R,obj.Attributes.ObjectColor.G,obj.Attributes.ObjectColor.B))
+        assert obj.Attributes.MaterialIndex>=0
+    assert (0,0,0) in colors and (220,0,0) in colors and (255,255,255) in colors
+    temp_doc.Dispose()
+    message = "PASS: Rhino 8 Eto UI, interpolated curve sampling, road mesh, and alternating curb meshes succeeded."
 except Exception:
     message = "FAIL:\n" + traceback.format_exc()
     with open(RESULT, "w", encoding="utf-8") as stream:

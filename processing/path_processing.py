@@ -29,27 +29,35 @@ def clean_points(points, min_distance=0.0):
     return result
 
 
+def chaikin_smooth(points, rounds=3, closed=False):
+    """Corner cutting that preserves open endpoints and smooths closed loops."""
+    points = list(points)
+    if rounds < 0:
+        raise PathProcessingError("Chaikin 平滑轮数不能为负数")
+    if len(points) < 3 or rounds == 0:
+        return points
+    current = points
+    for _ in range(rounds):
+        updated = [] if closed else [current[0]]
+        count = len(current) if closed else len(current) - 1
+        for i in range(count):
+            a, b = current[i], current[(i + 1) % len(current)]
+            updated.append((0.75 * a[0] + 0.25 * b[0], 0.75 * a[1] + 0.25 * b[1]))
+            updated.append((0.25 * a[0] + 0.75 * b[0], 0.25 * a[1] + 0.75 * b[1]))
+        if not closed:
+            updated.append(current[-1])
+        current = updated
+    return current
+
+
 def smooth_points(points, strength=0.3, closed=False):
     points = list(points)
     if not 0 <= strength <= 1:
         raise PathProcessingError("平滑程度必须位于 0 到 1 之间")
     if len(points) < 3 or strength == 0:
         return points
-    passes = max(1, int(round(strength * 5)))
-    current = points
-    for _ in range(passes):
-        updated = []
-        for i, point in enumerate(current):
-            if not closed and i in (0, len(current) - 1):
-                updated.append(point)
-                continue
-            prev = current[(i - 1) % len(current)]
-            nxt = current[(i + 1) % len(current)]
-            weight = min(0.45, strength * 0.45)
-            updated.append(((1 - 2 * weight) * point[0] + weight * (prev[0] + nxt[0]),
-                            (1 - 2 * weight) * point[1] + weight * (prev[1] + nxt[1])))
-        current = updated
-    return current
+    rounds = max(2, min(4, int(round(2 + strength * 2))))
+    return chaikin_smooth(points, rounds, closed)
 
 
 def _segments(points, closed):
@@ -79,14 +87,40 @@ def resample_points(points, spacing, closed=False):
         length = lengths[seg_index]
         t = 0.0 if length <= 1e-12 else (target - consumed) / length
         result.append((a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t))
+    if not closed and result:
+        result[0] = points[0]
+        result[-1] = points[-1]
+    return result
+
+
+def remove_short_backtracks(points, max_segment, closed=False):
+    """Remove tiny A-B-C reversals caused by skeleton/contour pixel artifacts."""
+    result=list(points)
+    if len(result)<3: return result
+    for _ in range(len(result)):
+        removed=False
+        indices=range(len(result)) if closed else range(1,len(result)-1)
+        for i in list(indices):
+            a,b,c=result[(i-1)%len(result)],result[i],result[(i+1)%len(result)]
+            u=(b[0]-a[0],b[1]-a[1]); v=(c[0]-b[0],c[1]-b[1]); lu=math.hypot(*u); lv=math.hypot(*v)
+            if min(lu,lv)<=1e-12: result.pop(i); removed=True; break
+            cosine=max(-1,min(1,(u[0]*v[0]+u[1]*v[1])/(lu*lv)))
+            angle=math.degrees(math.acos(cosine))
+            if angle>=165 and min(lu,lv)<=max_segment:
+                result.pop(i); removed=True; break
+        if not removed or len(result)<3: break
     return result
 
 
 def process_path(points, min_distance=1.0, smoothing=0.3, spacing=2.0, closed=False):
     cleaned = clean_points(points, min_distance)
+    cleaned = remove_short_backtracks(cleaned, max(spacing*2.0,min_distance*4.0), closed)
     if len(cleaned) < 2:
         raise PathProcessingError("路径至少需要两个有效且不同的点")
-    smoothed = smooth_points(cleaned, smoothing, closed)
+    # Sampling before smoothing makes mouse/image point density irrelevant.
+    sampled_once = resample_points(cleaned, spacing, closed)
+    smoothed = smooth_points(sampled_once, smoothing, closed)
+    smoothed = clean_points(smoothed, 1e-9)
     sampled = resample_points(smoothed, spacing, closed)
     if len(sampled) < (3 if closed else 2):
         raise PathProcessingError("路径过短，无法生成有效赛道")
