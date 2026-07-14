@@ -63,6 +63,8 @@ def test_create_first_person_track_project_copies_template_and_model(tmp_path):
     assert os.path.basename(project["uproject"])==PROJECT_NAME+".uproject"
     assert os.path.isfile(project["model"])
     assert os.path.basename(project["model"])=="generated_track.obj"
+    copied_text=open(project["model"],encoding="utf-8").read()
+    assert "o track" in copied_text
     assert os.path.isfile(os.path.join(project["project_dir"],PROJECT_MARKER))
     assert os.path.isfile(os.path.join(project["project_dir"],"TrackSource","generated_track.mtl"))
     assert os.path.isfile(project["script"])
@@ -73,6 +75,15 @@ def test_create_first_person_track_project_copies_template_and_model(tmp_path):
     assert "PointLight" in script_text
     with open(project["uproject"],encoding="utf-8") as stream:
         assert any(plugin["Name"]=="PythonScriptPlugin" for plugin in json.load(stream)["Plugins"])
+
+def test_copied_obj_uses_unreal_ground_axes(tmp_path):
+    editor=_make_fake_engine(tmp_path)
+    model=tmp_path/"generated_track.obj"
+    model.write_text("v 1 2 3\nvn 0 1 0\nf 1//1 1//1 1//1\n",encoding="utf-8")
+    project=create_first_person_track_project(str(editor),str(model),str(tmp_path/"OutProject"))
+    copied=open(project["model"],encoding="utf-8").read().splitlines()
+    assert copied[0]=="v 1 -3 2"
+    assert copied[1]=="vn 0 0 1"
 
 def test_create_first_person_track_project_refuses_existing_user_directory(tmp_path):
     editor=_make_fake_engine(tmp_path)

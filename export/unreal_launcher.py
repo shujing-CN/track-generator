@@ -90,12 +90,40 @@ def _copy_model_files(model_path, project_dir):
     source_dir = os.path.join(project_dir, "TrackSource")
     os.makedirs(source_dir, exist_ok=True)
     copied = os.path.join(source_dir, "generated_track.obj")
-    shutil.copy2(model_path, copied)
+    _copy_obj_with_unreal_axes(model_path, copied)
     base, _ = os.path.splitext(model_path)
     mtl = base + ".mtl"
     if os.path.isfile(mtl):
         shutil.copy2(mtl, os.path.join(source_dir, "generated_track.mtl"))
     return copied
+
+
+def _format_obj_number(value):
+    value = 0.0 if abs(value) < 1e-12 else value
+    return "{:.9g}".format(value)
+
+
+def _convert_rhino_to_unreal_xyz(x, y, z):
+    return x, -z, y
+
+
+def _copy_obj_with_unreal_axes(source_path, target_path):
+    with open(source_path, "r", encoding="utf-8", errors="ignore") as source, open(target_path, "w", encoding="utf-8") as target:
+        for line in source:
+            if line.startswith("v ") or line.startswith("vn "):
+                parts = line.rstrip("\n").split()
+                if len(parts) >= 4:
+                    try:
+                        x, y, z = (float(parts[1]), float(parts[2]), float(parts[3]))
+                    except ValueError:
+                        target.write(line)
+                        continue
+                    ux, uy, uz = _convert_rhino_to_unreal_xyz(x, y, z)
+                    converted = [parts[0], _format_obj_number(ux), _format_obj_number(uy), _format_obj_number(uz)]
+                    converted.extend(parts[4:])
+                    target.write(" ".join(converted) + "\n")
+                    continue
+            target.write(line)
 
 
 def write_import_script(project_dir):
