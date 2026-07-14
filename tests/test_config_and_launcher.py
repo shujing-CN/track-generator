@@ -1,7 +1,7 @@
 import json, os
 import pytest
 from config import APP_ROOT, app_path, load_config, save_config, DEFAULTS
-from export.unreal_launcher import DEFAULT_UNREAL_ARGS, PROJECT_MARKER, PROJECT_NAME, create_first_person_track_project, find_unreal_editors, find_unreal_projects, launch_first_person_track_project, launch_unreal
+from export.unreal_launcher import DEFAULT_UNREAL_ARGS, PROJECT_MARKER, PROJECT_NAME, create_first_person_track_project, find_unreal_editors, find_unreal_projects, launch_first_person_track_project, launch_unreal, run_unreal_setup
 
 def test_config_round_trip_and_fallback(tmp_path):
     path=tmp_path/"config.json"; save_config({"default_track_width":12},str(path)); assert load_config(str(path))["default_track_width"]==12
@@ -81,13 +81,31 @@ def test_create_first_person_track_project_refuses_existing_user_directory(tmp_p
 def test_launch_first_person_track_project_uses_import_script(tmp_path, monkeypatch):
     editor=_make_fake_engine(tmp_path)
     model=tmp_path/"generated_track.obj"; model.write_text("o track")
-    captured={}
+    captured={"run_args":None,"open_args":None}
     class DummyProcess: pass
+    class DummyCompleted:
+        returncode=0
+    def fake_run(args,cwd=None,timeout=None):
+        captured["run_args"]=args; captured["run_cwd"]=cwd; captured["timeout"]=timeout; return DummyCompleted()
     def fake_popen(args,cwd=None):
-        captured["args"]=args; captured["cwd"]=cwd; return DummyProcess()
+        captured["open_args"]=args; captured["open_cwd"]=cwd; return DummyProcess()
+    monkeypatch.setattr("subprocess.run",fake_run)
     monkeypatch.setattr("subprocess.Popen",fake_popen)
     project,process=launch_first_person_track_project(str(editor),str(model),str(tmp_path/"OutProject"))
     assert isinstance(process,DummyProcess)
-    assert project["uproject"] in captured["args"]
-    assert any(arg.startswith("-ExecutePythonScript=") for arg in captured["args"])
-    assert DEFAULT_UNREAL_ARGS[0] in captured["args"]
+    assert project["uproject"] in captured["run_args"]
+    assert any(arg.startswith("-ExecutePythonScript=") for arg in captured["run_args"])
+    assert DEFAULT_UNREAL_ARGS[0] in captured["run_args"]
+    assert project["uproject"] in captured["open_args"]
+    assert not any(arg.startswith("-ExecutePythonScript=") for arg in captured["open_args"])
+    assert DEFAULT_UNREAL_ARGS[0] in captured["open_args"]
+
+def test_run_unreal_setup_reports_nonzero_exit(tmp_path, monkeypatch):
+    editor=tmp_path/"UnrealEditor.exe"; editor.write_text("")
+    project=tmp_path/"Game.uproject"; project.write_text("{}")
+    script=tmp_path/"setup.py"; script.write_text("print('setup')")
+    class DummyCompleted:
+        returncode=7
+    monkeypatch.setattr("subprocess.run",lambda *args,**kwargs: DummyCompleted())
+    with pytest.raises(RuntimeError,match="exit code 7"):
+        run_unreal_setup(str(editor),str(project),str(script))

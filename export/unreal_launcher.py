@@ -8,6 +8,7 @@ import subprocess
 DEFAULT_UNREAL_ARGS = ("-DDC-ForceMemoryCache",)
 PROJECT_NAME = "GeneratedTrackFPS"
 PROJECT_MARKER = ".track_generator_project"
+DEFAULT_SETUP_TIMEOUT = 180
 
 
 def find_unreal_editors(search_root=None, manifest_root=None):
@@ -112,6 +113,52 @@ map_path = "/Game/Track/TrackMap"
 def log(message):
     unreal.log("[TrackGenerator] " + message)
 
+def set_default_map_config(project_dir, map_path):
+    config_path = os.path.join(project_dir, "Config", "DefaultEngine.ini")
+    section = "[/Script/EngineSettings.GameMapsSettings]"
+    object_path = map_path + "." + os.path.basename(map_path)
+    try:
+        with open(config_path, "r", encoding="utf-8") as stream:
+            lines = stream.read().splitlines()
+    except OSError:
+        lines = []
+    output = []
+    in_section = False
+    saw_section = False
+    wrote_editor = False
+    wrote_game = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            if in_section:
+                if not wrote_editor:
+                    output.append("EditorStartupMap=" + object_path)
+                if not wrote_game:
+                    output.append("GameDefaultMap=" + object_path)
+            in_section = stripped == section
+            saw_section = saw_section or in_section
+        if in_section and stripped.startswith("EditorStartupMap="):
+            output.append("EditorStartupMap=" + object_path)
+            wrote_editor = True
+            continue
+        if in_section and stripped.startswith("GameDefaultMap="):
+            output.append("GameDefaultMap=" + object_path)
+            wrote_game = True
+            continue
+        output.append(line)
+    if in_section:
+        if not wrote_editor:
+            output.append("EditorStartupMap=" + object_path)
+        if not wrote_game:
+            output.append("GameDefaultMap=" + object_path)
+    if not saw_section:
+        if output and output[-1].strip():
+            output.append("")
+        output.extend([section, "EditorStartupMap=" + object_path, "GameDefaultMap=" + object_path])
+    os.makedirs(os.path.dirname(config_path), exist_ok=True)
+    with open(config_path, "w", encoding="utf-8") as stream:
+        stream.write("\n".join(output) + "\n")
+
 asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
 if os.path.isfile(model_path) and not unreal.EditorAssetLibrary.does_asset_exist(asset_path):
     task = unreal.AssetImportTask()
@@ -133,10 +180,7 @@ if track_asset:
     start.set_actor_label("FirstPerson Start")
 
 unreal.EditorLoadingAndSavingUtils.save_map(world, map_path)
-settings = unreal.GameMapsSettings.get_game_maps_settings()
-settings.set_editor_property("editor_startup_map", unreal.SoftObjectPath(map_path))
-settings.set_editor_property("game_default_map", unreal.SoftObjectPath(map_path))
-settings.save_config()
+set_default_map_config(project_dir, map_path)
 log("Created first-person track map at " + map_path)
 '''
     with open(script_path, "w", encoding="utf-8") as stream:
@@ -172,7 +216,30 @@ def launch_unreal(editor_path, project_path, extra_args=None):
         raise RuntimeError("failed to launch Unreal Engine: {}".format(exc))
 
 
+def run_unreal_setup(editor_path, project_path, script_path, timeout=DEFAULT_SETUP_TIMEOUT):
+    editor_path = os.path.abspath(os.path.expanduser(editor_path or ""))
+    project_path = os.path.abspath(os.path.expanduser(project_path or ""))
+    script_path = os.path.abspath(os.path.expanduser(script_path or ""))
+    if not os.path.isfile(editor_path):
+        raise ValueError("UnrealEditor path is invalid")
+    if not os.path.isfile(project_path) or not project_path.lower().endswith(".uproject"):
+        raise ValueError("Unreal .uproject path is invalid")
+    if not os.path.isfile(script_path):
+        raise ValueError("Unreal setup script is invalid")
+    args = [editor_path, project_path] + list(DEFAULT_UNREAL_ARGS) + ["-ExecutePythonScript=" + script_path]
+    try:
+        completed = subprocess.run(args, cwd=os.path.dirname(project_path), timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError("Unreal setup timed out before opening the editor normally: {}".format(exc))
+    except OSError as exc:
+        raise RuntimeError("failed to run Unreal setup: {}".format(exc))
+    if completed.returncode != 0:
+        raise RuntimeError("Unreal setup failed with exit code {}".format(completed.returncode))
+    return completed
+
+
 def launch_first_person_track_project(editor_path, model_path, project_dir):
     project = create_first_person_track_project(editor_path, model_path, project_dir)
-    process = launch_unreal(editor_path, project["uproject"], ["-ExecutePythonScript=" + project["script"]])
+    run_unreal_setup(editor_path, project["uproject"], project["script"])
+    process = launch_unreal(editor_path, project["uproject"])
     return project, process
