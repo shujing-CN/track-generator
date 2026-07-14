@@ -66,6 +66,11 @@ def test_create_first_person_track_project_copies_template_and_model(tmp_path):
     assert os.path.isfile(os.path.join(project["project_dir"],PROJECT_MARKER))
     assert os.path.isfile(os.path.join(project["project_dir"],"TrackSource","generated_track.mtl"))
     assert os.path.isfile(project["script"])
+    script_text=open(project["script"],encoding="utf-8").read()
+    assert "DirectionalLight" in script_text
+    assert "SkyLight" in script_text
+    assert "SkyAtmosphere" in script_text
+    assert "PointLight" in script_text
     with open(project["uproject"],encoding="utf-8") as stream:
         assert any(plugin["Name"]=="PythonScriptPlugin" for plugin in json.load(stream)["Plugins"])
 

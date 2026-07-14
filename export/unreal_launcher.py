@@ -159,6 +159,49 @@ def set_default_map_config(project_dir, map_path):
     with open(config_path, "w", encoding="utf-8") as stream:
         stream.write("\n".join(output) + "\n")
 
+def spawn_lighting():
+    sun = unreal.EditorLevelLibrary.spawn_actor_from_class(
+        unreal.DirectionalLight,
+        unreal.Vector(-300, -400, 700),
+        unreal.Rotator(-45, -35, 0),
+    )
+    sun.set_actor_label("Track Sun Light")
+    sky = unreal.EditorLevelLibrary.spawn_actor_from_class(
+        unreal.SkyLight,
+        unreal.Vector(0, 0, 450),
+        unreal.Rotator(0, 0, 0),
+    )
+    sky.set_actor_label("Track Sky Light")
+    try:
+        sky_component = sky.get_component_by_class(unreal.SkyLightComponent)
+        sky_component.set_editor_property("intensity", 1.5)
+    except Exception:
+        pass
+    atmosphere = unreal.EditorLevelLibrary.spawn_actor_from_class(
+        unreal.SkyAtmosphere,
+        unreal.Vector(0, 0, 0),
+        unreal.Rotator(0, 0, 0),
+    )
+    atmosphere.set_actor_label("Track Sky Atmosphere")
+    fog = unreal.EditorLevelLibrary.spawn_actor_from_class(
+        unreal.ExponentialHeightFog,
+        unreal.Vector(0, 0, 0),
+        unreal.Rotator(0, 0, 0),
+    )
+    fog.set_actor_label("Track Height Fog")
+    fill = unreal.EditorLevelLibrary.spawn_actor_from_class(
+        unreal.PointLight,
+        unreal.Vector(0, -900, 700),
+        unreal.Rotator(0, 0, 0),
+    )
+    fill.set_actor_label("Track Start Fill Light")
+    try:
+        light_component = fill.get_component_by_class(unreal.PointLightComponent)
+        light_component.set_editor_property("intensity", 1200.0)
+        light_component.set_editor_property("attenuation_radius", 2200.0)
+    except Exception:
+        pass
+
 asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
 if os.path.isfile(model_path) and not unreal.EditorAssetLibrary.does_asset_exist(asset_path):
     task = unreal.AssetImportTask()
@@ -172,6 +215,7 @@ if os.path.isfile(model_path) and not unreal.EditorAssetLibrary.does_asset_exist
 
 track_asset = unreal.EditorAssetLibrary.load_asset(asset_path)
 world = unreal.EditorLoadingAndSavingUtils.new_blank_map(False)
+spawn_lighting()
 if track_asset:
     actor = unreal.EditorLevelLibrary.spawn_actor_from_object(track_asset, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
     actor.set_actor_label("Generated Track Map")
