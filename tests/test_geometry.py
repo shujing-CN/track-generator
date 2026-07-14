@@ -3,6 +3,7 @@ import pytest
 from geometry.track_builder import build_track_mesh_data, build_track_with_recovery, build_turn_curb_meshes, build_turn_curbs_from_track_mesh, sharp_turn_indices, TrackGeometryError
 from geometry.terrain_builder import build_terrain_mesh_data
 from processing.path_processing import process_path
+from rhino.document_manager import DEFAULT_CURB_RAISE, DEFAULT_ROAD_HEIGHT, DEFAULT_TERRAIN_HEIGHT
 
 def test_open_track_surface():
     vertices,faces=build_track_mesh_data([(0,0),(10,0),(20,0)],8)
@@ -20,6 +21,14 @@ def test_thick_track_has_solid_faces():
 def test_invalid_track_and_terrain():
     with pytest.raises(TrackGeometryError): build_track_mesh_data([(0,0)],4)
     with pytest.raises(ValueError): build_terrain_mesh_data(0,10)
+
+def test_document_height_layers_avoid_terrain_z_fighting():
+    default_thickness=.3
+    road_bottom=DEFAULT_ROAD_HEIGHT-default_thickness
+    curb_top=DEFAULT_ROAD_HEIGHT+DEFAULT_CURB_RAISE
+    assert DEFAULT_TERRAIN_HEIGHT < road_bottom
+    assert road_bottom-DEFAULT_TERRAIN_HEIGHT >= .25
+    assert curb_top > DEFAULT_ROAD_HEIGHT
 
 def test_sharp_turn_detection():
     assert isinstance(sharp_turn_indices([(0,0),(5,0),(5.1,.01)],8),list)

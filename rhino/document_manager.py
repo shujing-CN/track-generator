@@ -3,6 +3,10 @@ from geometry.terrain_builder import build_terrain_mesh_data
 from .layer_manager import ensure_layers, ensure_materials
 from .rhino_curve_builder import make_curve, sample_curve
 
+DEFAULT_ROAD_HEIGHT = 0.45
+DEFAULT_TERRAIN_HEIGHT = -0.25
+DEFAULT_CURB_RAISE = 0.08
+
 class GeneratedDocument:
     def __init__(self): self.object_ids=[]; self.quality_warnings=[]
 
@@ -17,7 +21,7 @@ class GeneratedDocument:
         if not mesh.IsValid: raise ValueError("generated Rhino mesh is invalid")
         return mesh
 
-    def generate(self,doc,points,source_points,map_width,map_length,track_width,closed,terrain=True,height=.1,thickness=0,sample_spacing=2.0,show_source=True,show_centerline=True):
+    def generate(self,doc,points,source_points,map_width,map_length,track_width,closed,terrain=True,height=DEFAULT_ROAD_HEIGHT,thickness=0,sample_spacing=2.0,show_source=True,show_centerline=True):
         import Rhino, System
         if doc is None: raise ValueError("Rhino current document is unavailable")
         if track_width>=min(map_width,map_length): raise ValueError("track width is too large for map dimensions")
@@ -38,11 +42,11 @@ class GeneratedDocument:
                 source=Rhino.Geometry.PolylineCurve([Rhino.Geometry.Point3d(x,y,0) for x,y in source_points]); staged.append(doc.Objects.AddCurve(source,attrs("SourcePath")))
             if show_centerline: staged.append(doc.Objects.AddCurve(centerline,attrs("Centerline")))
             staged.append(doc.Objects.AddMesh(self._mesh(v,f),attrs("Road")))
-            (rv,rf),(wv,wf)=build_turn_curbs_from_track_mesh(points,v,max(track_width*.12,.25),height+.035,closed,max(solid_thickness*.8,.12))
+            (rv,rf),(wv,wf)=build_turn_curbs_from_track_mesh(points,v,max(track_width*.12,.25),height+DEFAULT_CURB_RAISE,closed,max(solid_thickness*.8,.12))
             if rf: staged.append(doc.Objects.AddMesh(self._mesh(rv,rf),attrs("CurbsRed")))
             if wf: staged.append(doc.Objects.AddMesh(self._mesh(wv,wf),attrs("CurbsWhite")))
             if terrain:
-                v,f=build_terrain_mesh_data(map_width,map_length,0); staged.append(doc.Objects.AddMesh(self._mesh(v,f),attrs("Terrain")))
+                v,f=build_terrain_mesh_data(map_width,map_length,DEFAULT_TERRAIN_HEIGHT); staged.append(doc.Objects.AddMesh(self._mesh(v,f),attrs("Terrain")))
             if any(value==System.Guid.Empty for value in staged): raise ValueError("Rhino document rejected a generated object")
         except Exception:
             for oid in staged: doc.Objects.Delete(oid,True)

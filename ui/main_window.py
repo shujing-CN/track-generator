@@ -126,7 +126,7 @@ class TrackGeneratorWindow(forms.Form):
             raw,sw,sh=self._source(); closed=bool(self.closed.Checked); mw,ml,tw=float(self.width.Value),float(self.length.Value),float(self.track_width.Value)
             if tw<=0 or tw>=min(mw,ml): raise ValueError("赛道宽度必须大于 0 且明显小于地图尺寸")
             world_raw=map_points_to_world(raw,sw,sh,mw,ml); points=process_path(world_raw,max(.01,float(self.spacing.Value)*.15),float(self.smoothing.Value),float(self.spacing.Value),closed)
-            ids=self.generated.generate(self.doc,points,world_raw,mw,ml,tw,closed,bool(self.terrain.Checked),.1,float(self.thickness.Value),float(self.spacing.Value),bool(self.show_raw.Checked),bool(self.show_beautified.Checked))
+            ids=self.generated.generate(self.doc,points,world_raw,mw,ml,tw,closed,bool(self.terrain.Checked),thickness=float(self.thickness.Value),sample_spacing=float(self.spacing.Value),show_source=bool(self.show_raw.Checked),show_centerline=bool(self.show_beautified.Checked))
             warning="；"+self.generated.quality_warnings[0] if self.generated.quality_warnings else ""
             self._set_status("Rhino 模型生成成功：原始 {} 点，处理后 {} 点，共 {} 个对象，{}{}".format(len(raw),len(points),len(ids),"闭合" if closed else "开放",warning))
         except Exception as exc: self._error("模型生成失败",exc)
