@@ -1,11 +1,17 @@
 import json, os
 import pytest
-from config import load_config, save_config, DEFAULTS
+from config import APP_ROOT, app_path, load_config, save_config, DEFAULTS
 from export.unreal_launcher import DEFAULT_UNREAL_ARGS, PROJECT_MARKER, PROJECT_NAME, create_first_person_track_project, find_unreal_editors, find_unreal_projects, launch_first_person_track_project, launch_unreal
 
 def test_config_round_trip_and_fallback(tmp_path):
     path=tmp_path/"config.json"; save_config({"default_track_width":12},str(path)); assert load_config(str(path))["default_track_width"]==12
     path.write_text("bad json",encoding="utf8"); assert load_config(str(path))["default_map_width"]==DEFAULTS["default_map_width"]
+
+def test_app_path_is_independent_from_process_cwd(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    assert app_path("model")==os.path.join(APP_ROOT,"model")
+    absolute=os.path.join(str(tmp_path),"Project")
+    assert app_path(absolute)==absolute
 
 def test_launcher_validates_paths(tmp_path):
     with pytest.raises(ValueError,match="UnrealEditor"): launch_unreal(str(tmp_path/"missing.exe"),str(tmp_path/"x.uproject"))

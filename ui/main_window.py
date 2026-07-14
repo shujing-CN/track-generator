@@ -4,7 +4,7 @@ import Eto.Forms as forms
 import System
 from PIL import Image
 
-from config import load_config, save_config
+from config import app_path, load_config, save_config
 from processing.path_processing import process_path
 from processing.coordinate_mapping import map_points_to_world
 from processing.image_segmentation import auto_target_color, segment_by_color, largest_component, mask_preview, extract_ordered_path, SUPPORTED_EXTENSIONS
@@ -32,7 +32,7 @@ class TrackGeneratorWindow(forms.Form):
         from export.unreal_launcher import find_unreal_editors
         detected=find_unreal_editors()
         self.editor=forms.TextBox(); self.editor.Text=self.config.get("unreal_editor_path",'') or (detected[0] if detected else "")
-        self.project=forms.TextBox(); self.project.Text=self.config.get("unreal_project_directory",'') or os.path.join(os.getcwd(),"unreal_projects","GeneratedTrackFPS")
+        self.project=forms.TextBox(); self.project.Text=app_path(self.config.get("unreal_project_directory",'') or os.path.join("unreal_projects","GeneratedTrackFPS"))
         self.status=forms.Label(); self.status.Text="就绪"; self.status.Wrap=forms.WrapMode.Word
         self.Content=self._layout()
     def _numeric(self,value,minv,maxv,inc=1):
@@ -149,7 +149,7 @@ class TrackGeneratorWindow(forms.Form):
         try:
             from export.model_exporter import export_generated
             from export.unreal_launcher import launch_first_person_track_project
-            model_dir=os.path.join(os.getcwd(),"model"); os.makedirs(model_dir,exist_ok=True)
+            model_dir=app_path("model"); os.makedirs(model_dir,exist_ok=True)
             model_path=os.path.join(model_dir,"generated_track.obj")
             if self.generated.object_ids:
                 export_generated(self.doc,self.generated.object_ids,model_path)
