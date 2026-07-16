@@ -3,6 +3,9 @@ import os
 import sys
 import traceback
 import importlib
+from pathlib import Path
+
+from PIL import Image
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RESULT = os.path.join(ROOT, "rhino_ui_smoke_result.txt")
@@ -22,6 +25,9 @@ try:
     from rhino.rhino_curve_builder import make_curve, sample_curve
     from rhino.document_manager import GeneratedDocument
     from geometry.track_builder import build_track_mesh_data, build_turn_curbs_from_track_mesh
+    from processing.coordinate_mapping import map_points_to_world
+    from processing.image_segmentation import extract_ordered_path
+    from processing.path_processing import process_path
 
     window = TrackGeneratorWindow(Rhino.RhinoDoc.ActiveDoc)
     assert window.Content is not None
@@ -52,7 +58,24 @@ try:
         assert obj.Attributes.MaterialIndex>=0
     assert (0,0,0) in colors and (220,0,0) in colors and (255,255,255) in colors
     temp_doc.Dispose()
-    message = "PASS: Rhino 8 Eto UI, interpolated curve sampling, road mesh, and alternating curb meshes succeeded."
+    for image_path in sorted((Path(ROOT)/"images").glob("*")):
+        with Image.open(str(image_path)) as image:
+            raw,closed,mask,color=extract_ordered_path(image,None,.25)
+            assert closed
+            world=map_points_to_world(raw,image.width,image.height,500,500,fit_to_points=True)
+        span_x=max(point[0] for point in world)-min(point[0] for point in world)
+        assert span_x>350
+        processed=process_path(world,.3,.55,2,True)
+        image_doc=Rhino.RhinoDoc.CreateHeadless(None)
+        generated=GeneratedDocument()
+        image_ids=generated.generate(image_doc,processed,world,500,500,8,True,False,.1,.3,2,False,False)
+        assert image_ids
+        for object_id in image_ids:
+            obj=image_doc.Objects.FindId(object_id)
+            geometry=obj.Geometry
+            if isinstance(geometry,Rhino.Geometry.Mesh): assert geometry.IsValid
+        image_doc.Dispose()
+    message = "PASS: Rhino 8 Eto UI, repository image extraction, fitted paths, road meshes, and alternating curb meshes succeeded."
 except Exception:
     message = "FAIL:\n" + traceback.format_exc()
     with open(RESULT, "w", encoding="utf-8") as stream:

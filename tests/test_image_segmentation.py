@@ -1,7 +1,7 @@
 import random
 from PIL import Image, ImageDraw
 import pytest
-from processing.image_segmentation import auto_target_color, segment_by_color, largest_component, extract_ordered_path, mask_has_enclosed_hole
+from processing.image_segmentation import auto_target_color, segment_by_color, segment_foreground_auto, largest_component, extract_ordered_path, mask_has_enclosed_hole
 
 @pytest.mark.parametrize("bg,line", [((255,255,255),(0,0,0)),((0,0,0),(255,255,255)),((120,120,120),(255,0,0)),((0,80,180),(255,230,0))])
 def test_auto_color_and_segmentation(bg,line):
@@ -57,6 +57,29 @@ def test_slight_noise_and_color_variation():
         x,y=random.randrange(60),random.randrange(30); draw.point((x,y),fill=(210,205,205))
     mask=largest_component(segment_by_color(im,(205,24,25),.28))
     assert sum(map(sum,mask)) >= 45
+
+def test_auto_foreground_keeps_antialiased_uneven_stroke_connected():
+    im=Image.new("RGB",(180,100),(248,248,248)); draw=ImageDraw.Draw(im)
+    draw.line([(15,75),(45,25),(95,65),(165,20)],fill=(25,25,25),width=9,joint="curve")
+    draw.line([(15,76),(45,26),(95,66),(165,21)],fill=(70,70,70),width=2,joint="curve")
+    mask=largest_component(segment_foreground_auto(im))
+    xs=[x for y,row in enumerate(mask) for x,value in enumerate(row) if value]
+    assert max(xs)-min(xs)>145
+
+def test_very_low_manual_tolerance_still_extracts_complete_shape():
+    im=Image.new("RGB",(100,60),(250,250,250)); draw=ImageDraw.Draw(im)
+    draw.ellipse((10,8,90,52),outline=(20,20,20),width=6)
+    points,closed,mask,color=extract_ordered_path(im,(20,20,20),.01)
+    assert closed
+    assert max(x for x,y in points)-min(x for x,y in points)>70
+
+def test_clicked_antialias_colour_reuses_clean_automatic_component():
+    im=Image.new("RGB",(120,80),(250,250,250)); draw=ImageDraw.Draw(im)
+    draw.ellipse((12,10,108,70),outline=(35,35,35),width=8)
+    automatic=extract_ordered_path(im,None,.25)
+    manual=extract_ordered_path(im,(48,48,48),.01)
+    assert manual[1]
+    assert manual[0] == automatic[0]
 
 def test_blank_and_multiple_regions_rejected():
     with pytest.raises(ValueError): auto_target_color(Image.new("RGB",(20,20),"white"))

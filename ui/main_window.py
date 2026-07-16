@@ -103,7 +103,7 @@ class TrackGeneratorWindow(forms.Form):
         self._set_status("请在图片中的目标线上点击一个像素；点击后会按当前颜色容差刷新预览")
     def _auto(self,s,e):
         if not self.image: self._error("无法识别",ValueError("请先上传图片")); return
-        try: self.target_color=auto_target_color(self.image); self._extract("自动识别完成")
+        try: self.target_color=None; self._extract("自动识别完成")
         except Exception as exc: self._error("自动识别失败，请在线条上取色并调整容差",exc)
     def _extract(self,prefix):
         try:
@@ -125,7 +125,7 @@ class TrackGeneratorWindow(forms.Form):
         try:
             raw,sw,sh=self._source(); closed=bool(self.closed.Checked); mw,ml,tw=float(self.width.Value),float(self.length.Value),float(self.track_width.Value)
             if tw<=0 or tw>=min(mw,ml): raise ValueError("赛道宽度必须大于 0 且明显小于地图尺寸")
-            world_raw=map_points_to_world(raw,sw,sh,mw,ml); points=process_path(world_raw,max(.01,float(self.spacing.Value)*.15),float(self.smoothing.Value),float(self.spacing.Value),closed)
+            world_raw=map_points_to_world(raw,sw,sh,mw,ml,fit_to_points=self.mode_index==1); points=process_path(world_raw,max(.01,float(self.spacing.Value)*.15),float(self.smoothing.Value),float(self.spacing.Value),closed)
             ids=self.generated.generate(self.doc,points,world_raw,mw,ml,tw,closed,bool(self.terrain.Checked),thickness=float(self.thickness.Value),sample_spacing=float(self.spacing.Value),show_source=bool(self.show_raw.Checked),show_centerline=bool(self.show_beautified.Checked))
             warning="；"+self.generated.quality_warnings[0] if self.generated.quality_warnings else ""
             self._set_status("Rhino 模型生成成功：原始 {} 点，处理后 {} 点，共 {} 个对象，{}{}".format(len(raw),len(points),len(ids),"闭合" if closed else "开放",warning))
