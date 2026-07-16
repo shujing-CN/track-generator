@@ -38,6 +38,45 @@ def prune_to_cycle(mask):
     h=len(mask); w=len(mask[0]) if h else 0
     return [[(x,y) in pixels for x in range(w)] for y in range(h)]
 
+def longest_skeleton_path(mask):
+    """Return the longest useful center path in a possibly branched skeleton.
+
+    Uneven-width hand drawn or image-derived strokes often create small side
+    branches after thinning.  For track generation we only need the intended
+    main shape, so this extracts the graph diameter instead of rejecting the
+    whole path as branched.
+    """
+    pixels={(x,y) for y,row in enumerate(mask) for x,value in enumerate(row) if value}
+    if len(pixels)<2: raise ValueError("path is too short")
+    def neighbors(point):
+        x,y=point; result=set()
+        for dx,dy in ((0,-1),(1,0),(0,1),(-1,0),(1,1),(1,-1),(-1,1),(-1,-1)):
+            q=(x+dx,y+dy)
+            if q not in pixels: continue
+            if dx and dy and ((x+dx,y) in pixels or (x,y+dy) in pixels): continue
+            result.add(q)
+        return result
+    graph={p:neighbors(p) for p in pixels}
+    def bfs(start):
+        queue=[start]; parent={start:None}; distance={start:0}
+        for point in queue:
+            for nxt in sorted(graph[point]):
+                if nxt in parent: continue
+                parent[nxt]=point; distance[nxt]=distance[point]+1; queue.append(nxt)
+        farthest=max(distance,key=lambda p:(distance[p],-p[1],-p[0]))
+        return farthest,parent,distance
+    endpoints=[p for p,adjacent in graph.items() if len(adjacent)<=1]
+    starts=endpoints or list(pixels)
+    best_path=[]
+    for start in starts:
+        far,parent,distance=bfs(start)
+        path=[]; current=far
+        while current is not None:
+            path.append(current); current=parent[current]
+        if len(path)>len(best_path): best_path=path
+    if len(best_path)<2: raise ValueError("could not extract a main path")
+    return list(reversed(best_path))
+
 def trace_outer_contour(mask):
     """Moore-neighbor tracing of a connected mask's outer boundary."""
     pixels={(x,y) for y,row in enumerate(mask) for x,value in enumerate(row) if value}

@@ -1,7 +1,7 @@
 import colorsys
 from collections import deque
 from PIL import Image
-from .skeleton_processing import thin, trace_outer_contour
+from .skeleton_processing import thin, trace_outer_contour, longest_skeleton_path
 from .path_ordering import order_mask_path, PathOrderingError
 from .skeleton_processing import prune_to_cycle
 
@@ -53,6 +53,30 @@ def largest_component(mask):
         if not halo: raise ValueError("multiple disconnected regions")
     return [[(x,y) in parts[0] for x in range(w)] for y in range(h)]
 
+def mask_has_enclosed_hole(mask):
+    h=len(mask); w=len(mask[0]) if h else 0
+    if h<3 or w<3: return False
+    outside=set(); queue=deque()
+    for x in range(w):
+        for y in (0,h-1):
+            if not mask[y][x] and (x,y) not in outside:
+                outside.add((x,y)); queue.append((x,y))
+    for y in range(h):
+        for x in (0,w-1):
+            if not mask[y][x] and (x,y) not in outside:
+                outside.add((x,y)); queue.append((x,y))
+    while queue:
+        x,y=queue.popleft()
+        for dx,dy in ((1,0),(-1,0),(0,1),(0,-1)):
+            q=(x+dx,y+dy)
+            if 0<=q[0]<w and 0<=q[1]<h and not mask[q[1]][q[0]] and q not in outside:
+                outside.add(q); queue.append(q)
+    for y in range(1,h-1):
+        for x in range(1,w-1):
+            if not mask[y][x] and (x,y) not in outside:
+                return True
+    return False
+
 def extract_ordered_path(image, target_color=None, tolerance=.25):
     color=target_color or auto_target_color(image)
     mask=None; last_error=None
@@ -72,12 +96,18 @@ def extract_ordered_path(image, target_color=None, tolerance=.25):
     skeleton=thin(mask)
     try: points,closed=order_mask_path(skeleton)
     except PathOrderingError as exc:
-        if "branched" not in str(exc): raise
         cycle=prune_to_cycle(skeleton)
-        try: points,closed=order_mask_path(cycle)
+        try:
+            points,closed=order_mask_path(cycle)
         except PathOrderingError:
-            if sum(map(sum,cycle))<12: raise exc
-            points=trace_outer_contour(mask); closed=True
+            if mask_has_enclosed_hole(mask):
+                points=trace_outer_contour(mask); closed=True
+            else:
+                try:
+                    points=longest_skeleton_path(skeleton); closed=False
+                except ValueError:
+                    if sum(map(sum,cycle))<12 and "branched" not in str(exc): raise exc
+                    points=trace_outer_contour(mask); closed=True
     return points,closed,mask,color
 
 def mask_preview(image, mask):
